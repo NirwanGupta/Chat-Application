@@ -69,4 +69,14 @@ export const useChatStore = create((set, get) => ({
     },
 
     setSelectedUser: (selectedUser) => set({selectedUser}),
+
+    deleteMessage: async (messageId) => {
+        const {messages} = get();
+        try {
+            await axiosInstance.delete(`/message/delete/${messageId}`);
+            set({messages: messages.filter((message) => message._id !== messageId)});
+        } catch (error) {
+            toast.error(error.response.data.message);
+        }
+    },
 }));

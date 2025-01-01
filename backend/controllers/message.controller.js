@@ -53,6 +53,11 @@ const sendMessage = async (req, res) => {
     }
 
     let messages = await client.get(`Messages-${senderId}-${receiverId}`);
+    if(!messages) {
+        await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify([newMessage]));
+        await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
+        return res.status(200).json(newMessage);
+    }
     messages = JSON.parse(messages);
     messages.push(newMessage);
     await client.expire(`Messages-${senderId}-${receiverId}`, 0);
@@ -62,7 +67,11 @@ const sendMessage = async (req, res) => {
 
 const deleteMessage = async (req, res) => {
     const {id: messageId} = req.params;
-    const message = await Message.findByIdAndDelete({_id: messageId});
+    let message = await Message.findOne({_id: messageId});
+    console.log(message.senderId, message.receiverId);
+    const senderId = message.senderId;
+    const receiverId = message.receiverId;
+    message = await Message.findOneAndDelete({_id: messageId});
     let messages = await client.get(`Messages-${senderId}-${receiverId}`);
     messages = JSON.parse(messages);
     messages = messages.filter(mes => mes._id !== messageId);
@@ -78,6 +87,8 @@ const editMessage = async(req, res) => {
     message.text = text;
     message.updatedAt = new Date();
     await message.save();
+    const senderId = message.senderId;
+    const receiverId = message.receiverId;
     let messages = await client.get(`Messages-${senderId}-${receiverId}`);
     messages = JSON.parse(messages);
     messages = messages.map(mes => mes._id === messageId ? message : mes);
