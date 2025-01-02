@@ -12,6 +12,7 @@ const ChatContainer = () => {
   const messageEndRef = useRef(null);
   const [deleteMsg, setDeleteMsg] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
+  const [editMsg, setEditMsg] = useState(false);
 
   useEffect(() => {
     getMessages(selectedUser._id);
@@ -33,13 +34,22 @@ const ChatContainer = () => {
 
   const handleDelete = () => {
     if (messageToDelete) {
-      // Add your delete logic here
       deleteMessage(messageToDelete._id);
       console.log(`Deleting message: ${messageToDelete._id}`);
       setDeleteMsg(false);
       setMessageToDelete(null);
     }
   };
+
+  const handleEdit = () => {
+    if (messageToDelete) {
+      editMessage(messageToDelete._id);
+      console.log(`Editing message: ${messageToDelete._id}`);
+      setDeleteMsg(false);
+      setMessageToDelete(null);
+      setEditMsg(true);
+    }
+  }
 
   if (isMessagesLoading) return (
     <div className='flex-1 flex flex-col overflow-auto'>
@@ -59,6 +69,7 @@ const ChatContainer = () => {
             <p className="py-4">Do you want to delete this message? This action cannot be undone.</p>
             <div className="modal-action">
               <button onClick={handleCancel} className="btn">Cancel</button>
+              <button onClick={handleEdit} className='btn btn-danger'>Edit</button>
               <button onClick={handleDelete} className="btn btn-danger">Delete</button>
             </div>
           </div>
@@ -95,7 +106,7 @@ const ChatContainer = () => {
                   className="sm:max-w-[200px] rounded-md mb-2"
                 />
               )}
-              {message.text && <p>{message.text}</p>}
+              {message.text && <p className={message.deleted? 'opacity-40': ''}>{message.text}</p>}
             </div>
 
             {/* Ellipsis icon for showing the delete modal */}

@@ -27,6 +27,8 @@ export const useChatStore = create((set, get) => ({
         try {
             const res = await axiosInstance.get(`/message/${userId}`);
             set({messages: res.data});
+
+            
         } catch (error) {
             toast.error(error.response.data.message);
         } finally {
@@ -59,7 +61,11 @@ export const useChatStore = create((set, get) => ({
             set({
                 messages: [...get().messages, newMessage],
             });
-            console.log("newMessage: ", newMessage);
+        });
+
+        socket.on("deleteMessage", (cacheMessages) => {
+            // const updatedMessages = get().messages.filter((message) => message._id !== messageId);
+            set({messages: cacheMessages});
         });
     },
 
@@ -72,11 +78,23 @@ export const useChatStore = create((set, get) => ({
 
     deleteMessage: async (messageId) => {
         const {messages} = get();
+        const { selectedUser } = get();
+        const socket = useAuthStore.getState().socket;
         try {
-            await axiosInstance.delete(`/message/delete/${messageId}`);
-            set({messages: messages.filter((message) => message._id !== messageId)});
+            const res = await axiosInstance.delete(`/message/delete/${messageId}`);
+            set({messages: res.data});
         } catch (error) {
             toast.error(error.response.data.message);
         }
     },
+
+    editMessage : async (messageId) => {
+        const {messages} = get();
+        try {
+            const res = await axiosInstance.patch(`/message/edit/${messageId}`);
+            set({messages: res.data});
+        } catch (error) {
+            toast.error(error.response.data.message);
+        }
+    }
 }));
