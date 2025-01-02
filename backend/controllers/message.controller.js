@@ -24,7 +24,7 @@ const getMessages = async (req, res) => {
         receiverClient = true;
     }
     if(cacheMessages) {
-        console.log("Found in cache");
+        console.log(cacheMessages);
         const messages = JSON.parse(cacheMessages);
         return res.status(200).json(messages);
     }
@@ -97,6 +97,7 @@ const deleteMessage = async (req, res) => {
     const senderId = message.senderId;
     const receiverId = message.receiverId;
     message.text = 'This message was deleted';
+    message.image = "";
     message.deleted = true;
     await message.save();
 
@@ -134,20 +135,52 @@ const deleteMessage = async (req, res) => {
 
 const editMessage = async(req, res) => {
     const {id: messageId} = req.params;
+    console.log("messageId: " , messageId);
     const {text} = req.body;
-    const message = await Message.findOne({_id: messageId});
+    console.log("text: ", text);
+    let message = await Message.findOne({_id: messageId});
+    if(!message) {
+        console.log("No message was found");
+        return res.status(400).json({message: "Message not found"});    
+    }
     message.text = text;
     message.updatedAt = new Date();
     await message.save();
     const senderId = message.senderId;
     const receiverId = message.receiverId;
-    let messages = await client.get(`Messages-${senderId}-${receiverId}`);
-    messages = JSON.parse(messages);
-    messages = messages.map(mes => mes._id === messageId ? message : mes);
-    await client.expire(`Messages-${senderId}-${receiverId}`, 0);
-    await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(messages));
-    await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
-    res.status(200).json(message);
+
+    let cacheMessages = await client.get(`Messages-${senderId}-${receiverId}`);
+    let receiverClient = false;
+    if(!cacheMessages) {
+        cacheMessages = await client.get(`Messages-${receiverId}-${senderId}`);
+        receiverClient = true;
+    }
+
+    cacheMessages = JSON.parse(cacheMessages);
+    cacheMessages = cacheMessages.map((mes) => {
+        if(mes._id === messageId) {
+            return message;
+        }
+        return mes;
+    });
+
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if(receiverSocketId) {
+        io.to(receiverSocketId).emit("editMessage", cacheMessages);
+    }
+
+    if(receiverClient) {
+        await client.expire(`Messages-${receiverId}-${senderId}`, 0);
+        await client.set(`Messages-${receiverId}-${senderId}`, JSON.stringify(cacheMessages));
+        await client.expire(`Messages-${receiverId}-${senderId}`, 172800);
+    }
+    else {
+        await client.expire(`Messages-${senderId}-${receiverId}`, 0);
+        await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(cacheMessages));
+        await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
+    }
+    
+    res.status(200).json(cacheMessages);
 }
 
 module.exports = {

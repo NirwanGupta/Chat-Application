@@ -13,6 +13,7 @@ const ChatContainer = () => {
   const [deleteMsg, setDeleteMsg] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [editMsg, setEditMsg] = useState(false);
+  const [messageTo, setEditedText] = useState(null);
 
   useEffect(() => {
     getMessages(selectedUser._id);
@@ -29,6 +30,7 @@ const ChatContainer = () => {
 
   const handleCancel = () => {
     setDeleteMsg(false);
+    setEditMsg(false);
     setMessageToDelete(null);
   };
 
@@ -43,12 +45,19 @@ const ChatContainer = () => {
 
   const handleEdit = () => {
     if (messageToDelete) {
-      editMessage(messageToDelete._id);
       console.log(`Editing message: ${messageToDelete._id}`);
+      // setMessageToEdit(messageToDelete);
       setDeleteMsg(false);
-      setMessageToDelete(null);
+      // setMessageToDelete(null);
       setEditMsg(true);
     }
+  }
+
+  const handleEditSubmit = () => {
+    console.log(`Edited message: ${messageToDelete.text}`);
+    editMessage(messageToDelete);
+    setMessageToDelete(null);
+    setEditMsg(false);
   }
 
   if (isMessagesLoading) return (
@@ -61,7 +70,6 @@ const ChatContainer = () => {
 
   return (
     <div className={`flex-1 flex flex-col overflow-auto`}>
-      {/* Modal for delete confirmation */}
       {deleteMsg && (
         <div className={`modal modal-open`} role="dialog">
           <div className="modal-box">
@@ -71,6 +79,24 @@ const ChatContainer = () => {
               <button onClick={handleCancel} className="btn">Cancel</button>
               <button onClick={handleEdit} className='btn btn-danger'>Edit</button>
               <button onClick={handleDelete} className="btn btn-danger">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editMsg && (
+        <div className={`modal modal-open`} role="dialog">
+          <div className="modal-box">
+            <h3 className="text-lg font-bold">Please write your edited message</h3><br />
+            <input type='text' className="py-4 w-full input input-bordered rounded-lg input-sm sm:input-md" value={messageToDelete.text} onChange={(e) => {
+                setMessageToDelete((prev) => ({
+                  ...prev,
+                  text: e.target.value,
+                }));
+            }} />
+            <div className="modal-action">
+              <button onClick={handleCancel} className="btn">Cancel</button>
+              <button onClick={handleEditSubmit} className='btn btn-danger'>Edit</button>
             </div>
           </div>
         </div>
@@ -109,16 +135,15 @@ const ChatContainer = () => {
               {message.text && <p className={message.deleted? 'opacity-40': ''}>{message.text}</p>}
             </div>
 
-            {/* Ellipsis icon for showing the delete modal */}
-            <Ellipsis
+            {(authUser._id === message.senderId && !message.deleted) && <Ellipsis
               className={`${
                 message.senderId !== authUser._id ? 'translate-x-12' : ''
               } text-gray-400 cursor-pointer hover:text-gray-600 transition duration-200`}
               onClick={() => {
-                setDeleteMsg(true); // Show the delete modal
-                setMessageToDelete(message); // Set the message to delete
+                setDeleteMsg(true);
+                setMessageToDelete(message);
               }}
-            />
+            />}
           </div>
         ))}
       </div>

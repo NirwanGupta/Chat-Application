@@ -64,9 +64,12 @@ export const useChatStore = create((set, get) => ({
         });
 
         socket.on("deleteMessage", (cacheMessages) => {
-            // const updatedMessages = get().messages.filter((message) => message._id !== messageId);
             set({messages: cacheMessages});
         });
+
+        socket.on("editMessage", (cacheMessages) => {
+            set({messages: cacheMessages});
+        })
     },
 
     unsubscribeFromMessages: () => {
@@ -88,10 +91,13 @@ export const useChatStore = create((set, get) => ({
         }
     },
 
-    editMessage : async (messageId) => {
+    editMessage : async (message) => {
+        const messageId = message._id;
+        const text = message.text;
+        console.log(message._id, message.text);
         const {messages} = get();
         try {
-            const res = await axiosInstance.patch(`/message/edit/${messageId}`);
+            const res = await axiosInstance.patch(`/message/edit/${messageId}`, {text});
             set({messages: res.data});
         } catch (error) {
             toast.error(error.response.data.message);
