@@ -14,7 +14,7 @@ export const useAuthStore = create((set, get) => ({
     onlineUsers: [],
     socket: null,
     isGettingUsers: false,
-    users: [],
+    searchUsers: [],
 
     checkAuth: async () => {
         try {
@@ -86,12 +86,15 @@ export const useAuthStore = create((set, get) => ({
         }
     },
 
-    getUsers: async (search) => {
+    getSearchUsers: async (search) => {
         set({isGettingUsers: true});
         try {
+            console.log(search);
+            if(search === "") {
+                set({searchUsers: []});
+            }
             const res = await axiosInstance.get(`/auth/users?search=${search}`);
-            set({users: res.data});
-            set()
+            set({searchUsers: res.data});
         } catch (error) {
             toast.error(error.response.data.message);
         } finally {

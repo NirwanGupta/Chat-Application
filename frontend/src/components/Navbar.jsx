@@ -1,7 +1,8 @@
 import React from 'react'
 import { useAuthStore } from '../store/useAuthStore'
 import {Link} from "react-router-dom"
-import { MessageSquare, Settings, User, LogOut } from "lucide-react";
+import { MessageSquare, Settings, User, LogOut, Search } from "lucide-react";
+import SearchPage from './SearchPage';
 
 const Navbar = () => {
   const {logout, authUser} = useAuthStore();
@@ -22,6 +23,9 @@ const Navbar = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link to={"/search"} className={`btn btn-sm gap-2 transition-colors`}>
+              <Search className="w-4 h-4" />
+            </Link>
             <Link
               to={"/settings"}
               className={`
