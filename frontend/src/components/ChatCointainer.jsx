@@ -13,7 +13,6 @@ const ChatContainer = () => {
   const [deleteMsg, setDeleteMsg] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [editMsg, setEditMsg] = useState(false);
-  const [messageTo, setEditedText] = useState(null);
 
   useEffect(() => {
     getMessages(selectedUser._id);
@@ -46,9 +45,7 @@ const ChatContainer = () => {
   const handleEdit = () => {
     if (messageToDelete) {
       console.log(`Editing message: ${messageToDelete._id}`);
-      // setMessageToEdit(messageToDelete);
       setDeleteMsg(false);
-      // setMessageToDelete(null);
       setEditMsg(true);
     }
   }
@@ -102,7 +99,8 @@ const ChatContainer = () => {
         </div>
       )}
 
-      <ChatHeader className={`${deleteMsg? 'opacity-50': ''}`}/>
+      <ChatHeader className={`${deleteMsg ? 'opacity-50' : ''}`} />
+
 
       <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${deleteMsg? 'opacity-50': ''}`}>
         {messages.map((message) => (

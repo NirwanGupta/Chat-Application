@@ -13,6 +13,8 @@ export const useAuthStore = create((set, get) => ({
     isCheckingAuth: true, // as soon as we start the app, we are checking if the user is authenticate
     onlineUsers: [],
     socket: null,
+    isGettingUsers: false,
+    users: [],
 
     checkAuth: async () => {
         try {
@@ -81,6 +83,19 @@ export const useAuthStore = create((set, get) => ({
             toast.error(error.response.data.message);
         } finally {
             set({isUpdatingProfile: false});
+        }
+    },
+
+    getUsers: async (search) => {
+        set({isGettingUsers: true});
+        try {
+            const res = await axiosInstance.get(`/auth/users?search=${search}`);
+            set({users: res.data});
+            set()
+        } catch (error) {
+            toast.error(error.response.data.message);
+        } finally {
+            set({isGettingUsers: false});
         }
     },
 

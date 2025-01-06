@@ -69,10 +69,23 @@ const checkAuth = async (req, res) => {
     res.status(200).json(req.user);
 }
 
+const getUsers = async (req, res) => {
+    const {search} = req.query;
+    if(search) {
+        const users = await User.find({fullName: {$regex: search, $options: "i"}});
+        if(!users) {
+            return res.status(404).json({message: "No users found"});
+        }
+        return res.status(200).json(users);
+    }
+    return res.status(400).json({message: "Please provide a search query"});
+}
+
 module.exports = {
     signup,
     login,
     logout, 
     updateProfile, 
     checkAuth,
+    getUsers,
 };

@@ -24,7 +24,6 @@ const getMessages = async (req, res) => {
         receiverClient = true;
     }
     if(cacheMessages) {
-        console.log(cacheMessages);
         const messages = JSON.parse(cacheMessages);
         return res.status(200).json(messages);
     }
