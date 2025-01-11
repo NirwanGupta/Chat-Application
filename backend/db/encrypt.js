@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 
 const encryptMessage = (message, image, publicKey) => {
-    console.log("to be encrypted: ", message);
     const bufferMessage = Buffer.from(message, 'utf8');
     if(image === "") {
         let encryptedText = crypto.publicEncrypt(publicKey, bufferMessage);
