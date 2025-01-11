@@ -20,6 +20,14 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: `https://res.cloudinary.com/drnrsxnx9/image/upload/v1713185399/Music-World/Profile-Images/default-avatar-profile-icon-vector-social-media-user-image-182145777_mqovgx.webp`
     },
+    publicKey: {
+        type: String,
+        required: true,
+    },
+    privateKey: {
+        type: String,
+        required: true,
+    },
 }, {timestamps: true});
 
 userSchema.pre(`save`, async function() {

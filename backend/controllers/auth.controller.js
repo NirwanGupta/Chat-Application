@@ -1,6 +1,8 @@
 const User = require('../models/user.model');
 const {generateToken} = require('../db/utils');
 const {cloudinary} = require('../db/cloudinary');
+const {generateKeyPair} = require('../db/keyGeneration'); 
+const CryptoJS = require('crypto-js');
 
 const signup = async (req, res) => {
     console.log("SignUP");
@@ -8,18 +10,18 @@ const signup = async (req, res) => {
     if(!email || !fullName || !password) {
         res.status(400).json({message: "Please fill in the required fields"});
     }
-    // const user = await User.findOne({email});
-    // if(user) {
-    //     res.status(400).json({message: "User already exists"});
-    // }
-    const newUser = await User.create({email, fullName, password});
+    const {publicKey, privateKey} = generateKeyPair();
+    const privateKeyEnc = CryptoJS.AES.encrypt(privateKey, process.env.ENCRYPTION_KEY).toString();
+    const newUser = await User.create({email, fullName, password, publicKey, privateKey: privateKeyEnc});
     generateToken(newUser._id, res);
     await newUser.save();
+
     res.status(201).json({
         _id: newUser._id,
         fullName: newUser.fullName,
         email: newUser.email,
         profilePic: newUser.profile,
+        privateKey: privateKey,
     });
 };
 
