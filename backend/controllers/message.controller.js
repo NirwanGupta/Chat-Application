@@ -5,6 +5,7 @@ const { getReceiverSocketId, io } = require("../db/socket");
 const {client} = require(`../redis-client`);    
 const { encryptMessage, decryptMessage } = require(`../db/encrypt`);
 const CryptoJS = require('crypto-js');
+const crypto = require('crypto');
 
 //  cache key -> message - jisne message bheja - jisko bheja
 
@@ -14,120 +15,65 @@ const getUsersForSidebar = async (req, res) => {
     res.status(200).json(filteredUsers);
 }
 
-// const getMessages = async (req, res) => {
-//     const {id: receiverId} = req.params;
-//     const senderId = req.user._id;
-
-//     let receiverClient = false;
-//     console.log("Checking cache");
-//     let cacheMessages = await client.get(`Messages-${senderId}-${receiverId}`);
-//     if(!cacheMessages) {
-//         cacheMessages = await client.get(`Messages-${receiverId}-${senderId}`);
-//         receiverClient = true;
-//     }
-//     // if(cacheMessages) {
-//     //     const messages = JSON.parse(cacheMessages);
-
-//     //     return res.status(200).json(messages);
-//     // }
-//     console.log("Not found in cache");
-//     const messages = await Message.find({
-//         $or: [
-//             {senderId: senderId, receiverId: receiverId},
-//             {senderId: receiverId, receiverId: senderId}
-//         ]
-//     });
-
-//     const receiverUser = await User.findOne({_id: receiverId});
-//     const senderUser = await User.findOne({_id: senderId});
-
-//     messages.map((message) => {
-//         const keyToUse = message.senderId !== senderId ? senderUser.privateKey : receiverUser.privateKey;
-//         console.log(keyToUse);
-//         const pvtKey = CryptoJS.AES.decrypt(keyToUse, process.env.ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
-//         message.text = decryptMessage(message.text, pvtKey);
-//         if(message.image) {
-//             message.image = decryptMessage(message.image, pvtKey);
-//         }
-//     })
-//     if(receiverClient) {
-//         await client.set(`Messages-${receiverId}-${senderId}`, JSON.stringify(messages));
-//         await client.expire(`Messages-${receiverId}-${senderId}`, 172800);
-//     }
-//     else {
-//         await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(messages));
-//         await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
-//     }
-//     res.status(200).json(messages);
-// }
-
 const getMessages = async (req, res) => {
-    const { id: receiverId } = req.params;
+    const {id: receiverId} = req.params;
     const senderId = req.user._id;
 
     let receiverClient = false;
     console.log("Checking cache");
-
     let cacheMessages = await client.get(`Messages-${senderId}-${receiverId}`);
-    if (!cacheMessages) {
+    if(!cacheMessages) {
         cacheMessages = await client.get(`Messages-${receiverId}-${senderId}`);
         receiverClient = true;
     }
-
+    // if(cacheMessages) {
+    //     const messages = JSON.parse(cacheMessages);
+    //     return res.status(200).json(messages);
+    // }
     console.log("Not found in cache");
-
     const messages = await Message.find({
         $or: [
-            { senderId: senderId, receiverId: receiverId },
-            { senderId: receiverId, receiverId: senderId }
+            {senderId: senderId, receiverId: receiverId},
+            {senderId: receiverId, receiverId: senderId}
         ]
     });
 
-    const receiverUser = await User.findOne({ _id: receiverId });
-    const senderUser = await User.findOne({ _id: senderId });
+    const receiverUser = await User.findOne({_id: receiverId});
+    const senderUser = await User.findOne({_id: senderId});
 
     messages.map((message) => {
-        const keyToUse = message.senderId !== senderId ? receiverUser.privateKey : senderUser.privateKey;
-        
-        // Debugging: Log the selected private key
-        console.log("Selected key for decryption:", keyToUse);
-
-        if (!keyToUse) {
-            console.error("Private key is missing for decryption");
-            return; // Skip this message if no key is available
+        let keyToUse;
+        console.log(message.senderId, ", ", senderId);
+        if((message.senderId.toString()) === (senderId.toString())) {
+            console.log("Using receiver's key");
+            keyToUse = receiverUser.privateKey;
+        } 
+        else {
+            console.log("Using sender's key");
+            keyToUse = senderUser.privateKey;
         }
-
-        const pvtKey = CryptoJS.AES.decrypt(keyToUse, process.env.ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
-
-        // Debugging: Log the decrypted private key
-        console.log("Decrypted private key:", pvtKey);
-
-        if (!pvtKey) {
+        // const pvtKey = CryptoJS.AES.decrypt(keyToUse, process.env.ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
+        const pvtKey = keyToUse;
+        if(!pvtKey) {
             console.error("Private key decryption failed");
-            return; // Skip this message if decryption fails
+            return;
         }
-
-        try {
-            message.text = decryptMessage(message.text, pvtKey);
-            if (message.image) {
-                message.image = decryptMessage(message.image, pvtKey);
-            }
-        } catch (error) {
-            console.error("Decryption failed for message:", message, error);
+        message.text = decryptMessage(message.text, pvtKey);
+        console.log(message.text);
+        if(message.image) {
+            message.image = decryptMessage(message.image, pvtKey);
         }
-    });
-
-    if (receiverClient) {
+    })
+    if(receiverClient) {
         await client.set(`Messages-${receiverId}-${senderId}`, JSON.stringify(messages));
         await client.expire(`Messages-${receiverId}-${senderId}`, 172800);
-    } else {
+    }
+    else {
         await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(messages));
         await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
     }
-
     res.status(200).json(messages);
-};
-
+}
 
 const sendMessage = async (req, res) => {
     const {text, image} = req.body;
@@ -148,6 +94,8 @@ const sendMessage = async (req, res) => {
         imageUrl = uploadResponse.secure_url;
     }
     const {encryptedText, encryptedImage} = encryptMessage(text, imageUrl, publicKey);
+    // console.log(encryptedText);
+    // console.log(decryptMessage(encryptedText, receiverUser.privateKey));
     const encryptedNewMessage = await Message.create({senderId, receiverId, text: encryptedText, image: encryptedImage});
 
     const newMessage = await Message.create({senderId, receiverId, text, image: imageUrl});
