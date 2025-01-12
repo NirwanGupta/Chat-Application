@@ -6,8 +6,6 @@ const {client} = require(`../redis-client`);
 const { encryptMessage, decryptMessage } = require(`../db/encrypt`);
 const {decryptPrivateKey} = require(`../db/encryptPrivateKey`);
 
-//  cache key -> message - jisne message bheja - jisko bheja
-
 const getUsersForSidebar = async (req, res) => {
     const loggedInUserId = req.user._id;
     const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select(`-password`);
@@ -30,6 +28,7 @@ const getMessages = async (req, res) => {
     if(cacheMessages) {
         let messages = JSON.parse(cacheMessages);
         messages.map((message) => {
+            if(message.deleted) return message;
             let keyToUse;
             if((message.senderId.toString()) === (senderId.toString())) {
                 keyToUse = receiverUser.privateKey;
@@ -67,7 +66,7 @@ const getMessages = async (req, res) => {
 
     messages.map((message) => {
         let keyToUse;
-        console.log(message.senderId, ", ", senderId);
+        if(message.deleted) return message;
         if((message.senderId.toString()) === (senderId.toString())) {
             console.log("Using receiver's key");
             keyToUse = receiverUser.privateKey;
@@ -122,8 +121,16 @@ const sendMessage = async (req, res) => {
     const {encryptedText, encryptedImage} = encryptMessage(text, imageUrl, publicKey);
     const encryptedNewMessage = await Message.create({senderId, receiverId, text: encryptedText, image: encryptedImage});
 
-    const newMessage = await Message.create({senderId, receiverId, text, image: imageUrl});
-    const messageId = newMessage._id;
+    let newMessage = {
+        _id: encryptedNewMessage._id,
+        senderId: senderId,
+        receiverId: receiverId,
+        text: text,
+        image: imageUrl,
+        createdAt: encryptedNewMessage.createdAt,
+        updatedAt: encryptedNewMessage.updatedAt,
+        deleted: false,
+    };
 
     const receiverSocketId = getReceiverSocketId(receiverId);
     if(receiverSocketId) {
@@ -154,38 +161,67 @@ const sendMessage = async (req, res) => {
         await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
     }
 
-    await Message.findOneAndDelete({_id: messageId});
     res.status(200).json(newMessage);
 }
 
 const deleteMessage = async (req, res) => {
     const {id: messageId} = req.params;
     let message = await Message.findOne({_id: messageId});
-    
-    const senderId = message.senderId;
-    const receiverId = message.receiverId;
+    let senderId = message.senderId;
+    let receiverId = message.receiverId;
     message.text = 'This message was deleted';
     message.image = "";
     message.deleted = true;
     await message.save();
 
+    const senderUser = await User.findOne({_id: senderId});
+    const receiverUser = await User.findOne({_id: receiverId});
+
+    let messages = await client.get(`Messages-${senderId}-${receiverId}`);
     let cacheMessages = await client.get(`Messages-${senderId}-${receiverId}`);
     let receiverClient = false;
     if(!cacheMessages) {
+        messages = await client.get(`Messages-${receiverId}-${senderId}`);
         cacheMessages = await client.get(`Messages-${receiverId}-${senderId}`);
         receiverClient = true;
     }
     cacheMessages = JSON.parse(cacheMessages);
+    messages = JSON.parse(messages);
     cacheMessages = cacheMessages.map((mes) => {
         if(mes._id === messageId) {
             return message;
         }
         return mes;
     });
+    messages = messages.map((mes) => {
+        if(mes._id === messageId) return message;
+        return mes;
+    });
+
+    messages = messages.map((message) => {
+        if(message.deleted) return message;
+        let keyToUse;
+        if((message.senderId.toString()) === (senderId.toString())) {
+            keyToUse = receiverUser.privateKey;
+        }
+        else {
+            keyToUse = senderUser.privateKey;
+        }
+        const pvtKey = decryptPrivateKey(keyToUse);
+        if(!pvtKey) {
+            console.error("Private key decryption failed");
+            return;
+        }
+        message.text = decryptMessage(message.text, pvtKey);
+        if(message.image) {
+            message.image = decryptMessage(message.image, pvtKey);
+        }
+        return message;
+    })
 
     const receiverSocketId = getReceiverSocketId(receiverId);
     if(receiverSocketId) {
-        io.to(receiverSocketId).emit("deleteMessage", cacheMessages);
+        io.to(receiverSocketId).emit("deleteMessage", messages);
     }
 
     if(receiverClient) {
@@ -198,58 +234,89 @@ const deleteMessage = async (req, res) => {
         await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(cacheMessages));
         await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
     }
-    res.status(200).json(cacheMessages);
+    res.status(200).json(messages);
 }
 
-const editMessage = async(req, res) => {
-    const {id: messageId} = req.params;
-    console.log("messageId: " , messageId);
-    const {text} = req.body;
-    console.log("text: ", text);
-    let message = await Message.findOne({_id: messageId});
+const editMessage = async (req, res) => {
+    const { id: messageId } = req.params;
+    const { text } = req.body;
+
+    let message = await Message.findOne({ _id: messageId });
     if(!message) {
         console.log("No message was found");
-        return res.status(400).json({message: "Message not found"});    
+        return res.status(400).json({ message: "Message not found" });
     }
-    message.text = text;
-    message.updatedAt = new Date();
-    await message.save();
+
     const senderId = message.senderId;
     const receiverId = message.receiverId;
 
+    const senderUser = await User.findOne({ _id: senderId });
+    const receiverUser = await User.findOne({ _id: receiverId });
+
+    message.text = encryptMessage(text, "", receiverUser.publicKey).encryptedText;
+    message.updatedAt = new Date();
+    await message.save();
+
     let cacheMessages = await client.get(`Messages-${senderId}-${receiverId}`);
+    let messages = await client.get(`Messages-${senderId}-${receiverId}`);
     let receiverClient = false;
+
     if(!cacheMessages) {
         cacheMessages = await client.get(`Messages-${receiverId}-${senderId}`);
+        messages = await client.get(`Messages-${receiverId}-${senderId}`);
         receiverClient = true;
     }
 
     cacheMessages = JSON.parse(cacheMessages);
+    messages = JSON.parse(messages);
+
     cacheMessages = cacheMessages.map((mes) => {
         if(mes._id === messageId) {
-            return message;
+            return { ...message.toObject() };
         }
         return mes;
     });
 
+    messages = messages.map((mes) => {
+        if(mes._id === messageId) {
+            return { ...message.toObject() };
+        }
+        return mes;
+    });
+
+    messages = messages.map((msg) => {
+        if (msg.deleted) return msg;
+        let keyToUse = (msg.senderId.toString() === senderId.toString())? receiverUser.privateKey: senderUser.privateKey;
+        const pvtKey = decryptPrivateKey(keyToUse);
+        if(!pvtKey) {
+            console.error("Private key decryption failed");
+            return msg;
+        }
+        msg.text = decryptMessage(msg.text, pvtKey);
+        if(msg.image) {
+            msg.image = decryptMessage(msg.image, pvtKey);
+        }
+        return msg;
+    });
+
     const receiverSocketId = getReceiverSocketId(receiverId);
     if(receiverSocketId) {
-        io.to(receiverSocketId).emit("editMessage", cacheMessages);
+        io.to(receiverSocketId).emit("editMessage", messages);
     }
 
     if(receiverClient) {
         await client.expire(`Messages-${receiverId}-${senderId}`, 0);
         await client.set(`Messages-${receiverId}-${senderId}`, JSON.stringify(cacheMessages));
         await client.expire(`Messages-${receiverId}-${senderId}`, 172800);
-    }
+    } 
     else {
         await client.expire(`Messages-${senderId}-${receiverId}`, 0);
         await client.set(`Messages-${senderId}-${receiverId}`, JSON.stringify(cacheMessages));
         await client.expire(`Messages-${senderId}-${receiverId}`, 172800);
     }
-    
-    res.status(200).json(cacheMessages);
-}
+    res.status(200).json(messages);
+};
+
 
 module.exports = {
     getUsersForSidebar,
